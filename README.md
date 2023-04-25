@@ -1,2 +1,2 @@
-# adimenia
-test repo
+# Trading Strategy Python
+
