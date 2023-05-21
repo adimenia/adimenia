@@ -1,6 +1,6 @@
+import argparse
 import requests
 import pandas as pd
-import argparse
 from scipy.signal import argrelextrema
 import numpy as np
 from sklearn.linear_model import LinearRegression
