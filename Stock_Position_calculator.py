@@ -38,14 +38,14 @@ class StockTrader:
             stop_loss = close_price - atr  # Set stop loss level to entry price minus ATR
             shares_to_buy = self.risk_amount / (close_price - stop_loss)
             position_size = shares_to_buy * close_price
-            return stop_loss, shares_to_buy, position_size, close_price, atr
+            return stop_loss, shares_to_buy, position_size, close_price
         else:
             return None, None, None, None, None
 
 def main(ticker, risk_amount):
     api_key = 'LL6JIGZ7J1TZUXUW'
     trader = StockTrader(ticker, risk_amount, api_key)
-    stop_loss, shares_to_buy, position_size, close_price, atr = trader.calculate_trade()
+    stop_loss, shares_to_buy, position_size, close_price = trader.calculate_trade()
 
     console = Console()
     table = Table(show_header=True, header_style="bold magenta")
