@@ -21,7 +21,7 @@ class StockTrader:
         
     def get_atr(self):
         url = f'https://www.alphavantage.co/query?function=ATR&symbol={self.ticker}&interval=daily&time_period=14&apikey={self.api_key}'
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         data = response.json()
         if 'Technical Analysis: ATR' in data:
             # get the most recent ATR value
