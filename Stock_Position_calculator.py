@@ -6,13 +6,28 @@ import datetime
 from alpaca_trade_api.rest import REST, TimeFrame
 import pandas_market_calendars as mcal
 import pandas as pd
+import json
+import os
 
 class StockTrader:
-    def __init__(self, ticker, risk_amount, api_key, secret_key):
+    def __init__(self, ticker, risk_amount, api_key):
         self.ticker = ticker
         self.risk_amount = risk_amount
         self.api_key = api_key
-        self.api = REST(api_key, secret_key)
+        self.total_account_size = 2000
+        self.total_account_risk = 0.02
+        #self.api = REST(api_key, secret_key)
+    
+    def load_config(self, config_file_path='config.json'):
+        if not os.path.isfile(config_file_path):
+            print(f"No config file found at {config_file_path}. Using command line arguments or defaults.")
+            return
+        with open(config_file_path, 'r') as file:
+            config = json.load(file)
+        self.api_key = config.get('api_key', self.api_key)
+        self.total_account_size = config.get('total_account_size', self.total_account_size)
+        self.total_account_risk = config.get('total_account_risk', self.total_account_risk)
+        self.risk_amount = config.get('risk_amount', self.risk_amount)
 
     def is_trading_day(self, date):
         nyse = mcal.get_calendar('NYSE')
@@ -112,10 +127,11 @@ class StockTrader:
         return start_date, entry_price, self.risk_amount, stop_loss, shares_to_buy, position_size, final_close_price, profit_percent, profit, trade_outcome, end_date_str
 
 
-def main(ticker, risk_amount, start_date=None):
+def main(ticker, risk_amount, start_date=None,  config_file_path='config.json'):
     api_key = 'LL6JIGZ7J1TZUXUW'
-    secret_key = 'PKAA7525K2KNBQZXFW97'
-    trader = StockTrader(ticker, risk_amount, api_key, secret_key)
+    #secret_key = 'PKAA7525K2KNBQZXFW97'
+    trader = StockTrader(ticker, risk_amount, api_key)
+    trader.load_config(config_file_path)
     console = Console()
     table = Table(show_header=True, header_style="bold magenta")
 
@@ -158,7 +174,8 @@ if __name__ == "__main__":
     parser.add_argument("--ticker", help="Ticker symbol for the stock", required=True)
     parser.add_argument("--risk_amount", type=float, help="Amount in dollars to risk per trade", required=True)
     parser.add_argument("--start_date", type=str, help="Date to start back test (YYYY-MM-DD format)")
+    parser.add_argument("--config_file_path", type=str, help="Path to the config file", default='config.json')
     args = parser.parse_args()
 
-    main(args.ticker, args.risk_amount, args.start_date)
+    main(args.ticker, args.risk_amount, args.start_date, args.config_file_path)
 
