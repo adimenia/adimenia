@@ -10,25 +10,39 @@ import json
 import os
 
 class StockTrader:
-    def __init__(self, ticker, risk_amount, api_key):
-        self.ticker = ticker
-        self.risk_amount = risk_amount
+    def __init__(self, ticker, api_key, config_file_path='config.json', reset_trade_counter=False):
+        #self.ticker = ticker
         self.api_key = api_key
+        self.config_file_path = config_file_path
+        # Default values
         self.total_account_size = 2000
         self.total_account_risk = 0.02
-        #self.api = REST(api_key, secret_key)
+        self.risk_amount = 100
+        self.max_trades_per_day = 5
+        self.trade_counter = 0
+        # Check if config file exists
+        if not os.path.isfile(self.config_file_path):
+            print(f"No config file found at {config_file_path}. Using defaults.")
+            '''self.total_account_size = self.total_account_size
+            self.total_account_risk = self.total_account_risk
+            self.risk_amount = self.risk_amount
+            self.max_trades_per_day = self.max_trades_per_day'''
+        else:
+            # If config file exists, load it
+            self.load_config(config_file_path)
     
-    def load_config(self, config_file_path='config.json'):
-        if not os.path.isfile(config_file_path):
-            print(f"No config file found at {config_file_path}. Using command line arguments or defaults.")
-            return
-        with open(config_file_path, 'r') as file:
+    def set_ticker(self, ticker):
+        self.ticker = ticker
+    
+    def load_config(self, config_file_path):
+        with open(config_file_path, 'r', encoding='utf-8') as file:
             config = json.load(file)
         self.api_key = config.get('api_key', self.api_key)
         self.total_account_size = config.get('total_account_size', self.total_account_size)
         self.total_account_risk = config.get('total_account_risk', self.total_account_risk)
         self.risk_amount = config.get('risk_amount', self.risk_amount)
-
+        self.max_trades_per_day = config.get('max_trades_per_day', self.max_trades_per_day)
+        
     def is_trading_day(self, date):
         nyse = mcal.get_calendar('NYSE')
         trading_days = nyse.valid_days(start_date=date, end_date=date)
@@ -68,8 +82,19 @@ class StockTrader:
         else:
             print(f"Could not fetch ATR for {self.ticker}")
             return None
+        
+    def calculate_risk_per_trade(self, num_trades):
+        total_risk_amount = self.total_account_size * self.total_account_risk
+        risk_per_trade = total_risk_amount / num_trades
+        return risk_per_trade
 
-    def calculate_trade(self, start_date=None):
+    def calculate_trade(self, risk_amount, start_date=None):
+        
+        '''risk_amount = self.calculate_risk_per_trade(self.max_trades_per_day)
+        if start_date is not None:
+            close_price = self.get_close_price_on_date(start_date)
+        else:
+            close_price = self.get_recent_close_price()'''
         if start_date is not None:
             close_price = self.get_close_price_on_date(start_date)
         else:
@@ -78,11 +103,11 @@ class StockTrader:
         atr = self.get_atr()
         if close_price is not None and atr is not None:
             stop_loss = close_price - atr  # Set stop loss level to entry price minus ATR
-            shares_to_buy = self.risk_amount / (close_price - stop_loss)
+            shares_to_buy = risk_amount / (close_price - stop_loss)
             position_size = shares_to_buy * close_price
-            return stop_loss, shares_to_buy, position_size, close_price
+            return stop_loss, shares_to_buy, position_size, close_price, risk_amount
         else:
-            return None, None, None, None
+            return None, None, None, None, None
 
     def back_test(self, start_date):
         # Get NYSE calendar
@@ -127,55 +152,80 @@ class StockTrader:
         return start_date, entry_price, self.risk_amount, stop_loss, shares_to_buy, position_size, final_close_price, profit_percent, profit, trade_outcome, end_date_str
 
 
-def main(ticker, risk_amount, start_date=None,  config_file_path='config.json'):
+def main(ticker, risk_amount, start_date=None,  config_file_path='config.json', reset_trade_counter=False):
     api_key = 'LL6JIGZ7J1TZUXUW'
     #secret_key = 'PKAA7525K2KNBQZXFW97'
-    trader = StockTrader(ticker, risk_amount, api_key)
+    trader = StockTrader(ticker, api_key, config_file_path, reset_trade_counter)
     trader.load_config(config_file_path)
     console = Console()
-    table = Table(show_header=True, header_style="bold magenta")
 
-    if start_date:
-        start_date, entry_price, risk_amount, stop_loss, shares_to_buy, position_size, final_close_price, profit_percent, profit, trade_outcome, end_date = trader.back_test(start_date)
+    while trader.trade_counter < trader.max_trades_per_day:
+        table = Table(show_header=True, header_style="bold magenta")
+        ticker = input("Enter a ticker (or 'quit' to exit): ")
+        trader.set_ticker(ticker)
+        if ticker.lower() == 'quit':
+            break
 
-        table.add_column("Start Date")
-        table.add_column("Entry Price")
-        table.add_column("Risk Amount")
-        table.add_column("Stop Loss")
-        table.add_column("Shares to Buy")
-        table.add_column("Position Size")
-        table.add_column("Close Price")
-        table.add_column("Profit (%)")
-        table.add_column("Profit ($)")
-        table.add_column("Trade Outcome")
-        table.add_column("End Date")
-
-        table.add_row(start_date, f"{entry_price:.2f}", f"{risk_amount}$", f"{stop_loss:.2f}$", f"{shares_to_buy:.2f}", f"{position_size:.2f}$", f"{final_close_price:.2f}$", f"{profit_percent:.2f}%", f"{profit:.2f}$", trade_outcome, end_date)
-    else:
-        stop_loss, shares_to_buy, position_size, close_price = trader.calculate_trade()
-        
-        table.add_column("Ticker")
-        table.add_column("Entry Price")
-        table.add_column("Risk Amount")
-        table.add_column("Stop Loss")
-        table.add_column("Shares to Buy")
-        table.add_column("Position Size")
-        table.add_column("Close Price")
-
-        if stop_loss is not None and shares_to_buy is not None and position_size is not None:
-            table.add_row(ticker, f"{close_price:.2f}$", f"{str(risk_amount)}$", f"{stop_loss:.2f}$", f"{shares_to_buy:.2f}", f"{position_size:.2f}$", f"{close_price:.2f}")
+        risk_amount_option = input("Enter '1' to manually specify risk amount or '2' to use the value from the config file: ")
+        if risk_amount_option == '1':
+            risk_amount = float(input("Enter the risk amount: "))
+        elif risk_amount_option == '2':
+            risk_amount = trader.calculate_risk_per_trade(trader.max_trades_per_day)
         else:
-            table.add_row(ticker, str(risk_amount), "Could not calculate", "Could not calculate", "Could not calculate")
+            print("Invalid option. Exiting.")
+            return
+        
+        start_date = input("Enter the start date (or leave empty): ")
+        if not start_date:
+            start_date = None
 
-    console.print(table)
+        if start_date:
+            risk_amount = trader.calculate_trade(start_date)
+            start_date, entry_price, risk_amount, stop_loss, shares_to_buy, position_size, final_close_price, profit_percent, profit, trade_outcome, end_date = trader.back_test(start_date)
+
+            table.add_column("Start Date")
+            table.add_column("Entry Price")
+            table.add_column("Risk Amount")
+            table.add_column("Stop Loss")
+            table.add_column("Shares to Buy")
+            table.add_column("Position Size")
+            table.add_column("Close Price")
+            table.add_column("Profit (%)")
+            table.add_column("Profit ($)")
+            table.add_column("Trade Outcome")
+            table.add_column("End Date")
+
+            table.add_row(start_date, f"{entry_price:.2f}", f"{risk_amount}$", f"{stop_loss:.2f}$", f"{shares_to_buy:.2f}", f"{position_size:.2f}$", f"{final_close_price:.2f}$", f"{profit_percent:.2f}%", f"{profit:.2f}$", trade_outcome, end_date)
+        else:
+            stop_loss, shares_to_buy, position_size, close_price, _ = trader.calculate_trade(risk_amount, start_date)
+            
+            table.add_column("Ticker")
+            table.add_column("Entry Price")
+            table.add_column("Risk Amount")
+            table.add_column("Stop Loss")
+            table.add_column("Shares to Buy")
+            table.add_column("Position Size")
+            table.add_column("Close Price")
+
+            if stop_loss is not None and shares_to_buy is not None and position_size is not None:
+                table.add_row(ticker, f"{close_price:.2f}$", f"{str(risk_amount)}$", f"{stop_loss:.2f}$", f"{shares_to_buy:.2f}", f"{position_size:.2f}$", f"{close_price:.2f}")
+            else:
+                table.add_row(ticker, str(risk_amount), "Could not calculate", "Could not calculate", "Could not calculate")
+        
+        console.print(table)
+        trader.trade_counter += 1
+
+    if trader.trade_counter >= trader.max_trades_per_day:
+        print("Maximum trade limit reached. To resume trading run the code with the --reset_trade_counter set to True")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ticker", help="Ticker symbol for the stock", required=True)
-    parser.add_argument("--risk_amount", type=float, help="Amount in dollars to risk per trade", required=True)
+    parser.add_argument("--ticker", help="Ticker symbol for the stock", required=False)
+    parser.add_argument("--risk_amount", type=float, help="Amount in dollars to risk per trade")
     parser.add_argument("--start_date", type=str, help="Date to start back test (YYYY-MM-DD format)")
     parser.add_argument("--config_file_path", type=str, help="Path to the config file", default='config.json')
+    parser.add_argument("--reset_trade_counter", action='store_true', help="Reset trade counter", default=False)
     args = parser.parse_args()
 
-    main(args.ticker, args.risk_amount, args.start_date, args.config_file_path)
+    main(args.ticker, args.risk_amount, args.start_date, args.config_file_path, args.reset_trade_counter)
 
